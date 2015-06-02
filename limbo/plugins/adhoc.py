@@ -1,11 +1,13 @@
-"""Only direct messages are accepted, format is @user codeupdate <tag> <env>"""
+"""Only direct messages are accepted, format is <user> <env> <host> <mod> <args_if_any"""
 
 try:
     from urllib import quote, unquote
 except ImportError:
     from urllib.request import quote, unquote
+import re
 import requests
 import json
+from random import shuffle
 import unicodedata
 
 ALLOWED_CHANNELS = []
@@ -22,29 +24,31 @@ def get_url(infra_env):
     else:
         return BOOTSTRAPPER_STAGING_URL
 
-def codeupdate(ans_env, ans_tag):
+def adhoc(ans_host, ans_mod, ans_arg, ans_env):
     base_url = get_url(ans_env)
-    req_url = base_url + '/ansible/update-code/'
-    resp = requests.post(req_url, data={'tags': ans_tag, 'env': ans_env})
+    req_url = base_url + '/ansible/adhoc/'
+    if ans_arg is None:
+        resp = requests.get(req_url, params={'host': ans_host, 'mod': ans_mod})
+    else:
+        resp = requests.get(req_url, params={'host': ans_host, 'mod': ans_mod, 'args': ans_arg})
     return [resp.status_code, resp.text]
 
 def on_message(msg, server):
-    init_msg =  unicodedata.normalize('NFKD', msg['text']).encode('ascii','ignore').split(' ')[0]
 ### slight hackish method to check if the message is a direct message or not
-    if init_msg == '<@xxxxxx>:':    # Message is actually a direct message to the Bot
+    init_msg =  unicodedata.normalize('NFKD', msg['text']).encode('ascii','ignore').split(' ')[0]
+    if init_msg == '<@xxxxxxx>:':    # Message is actually a direct message to the Bot
         orig_msg =  unicodedata.normalize('NFKD', msg['text']).encode('ascii','ignore').split(' ')[2:]
         msg_user = msg['user']
         msg_channel = msg['channel']
         if msg_user in ALLOWED_USERS and msg_channel in ALLOWED_CHANNELS:
-            env = orig_msg[1]
+            env = orig_msg[0]
             if env not in ALLOWED_ENV:
-                return "Please Pass a Valid Env (xxxx/yyyy)"
-            tag = orig_msg[0]
-            if tag not in ALLOWED_TAG:
-                return "Please Pass a Valid Tag (xxxx/yyyy)"
-            return codeupdate(env, tag)
+                return "Only Dev Environment is Supported Currently"
+            host = orig_msg[1]
+            mod = orig_msg[2]
+            arg = orig_msg[2:]
+            return adhoc(host, mod, arg, env)
         else:
             return ("!!! You are not Authorized !!!")
     else:
-        return "invalid Message Format, Format: <user> codeupdate <tag> <env>"
-
+        return "Invalid Message, Format: <user> <env> <host> <mod> <args_if_any>"
